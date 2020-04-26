@@ -445,11 +445,25 @@ extern int soft_i2c_gpio_scl;
 	"stdin=serial\0"
 #endif
 
+#ifdef CONFIG_DM_VIDEO
+#define CONFIG_VIDEO_BMP_RLE8
+#define CONFIG_BMP_16BPP
+#define CONFIG_BMP_24BPP
+#define CONFIG_BMP_32BPP
+#define CONFIG_SPLASH_SCREEN
+#define CONFIG_SPLASH_SOURCE
+#define SPLASHIMAGE_ENV_SETTINGS "splashimage=" __stringify(SDRAM_OFFSET(2000000)) "\0"
+#define CONFIG_ENV_DYNAMIC_DEFAULT
+#else
+#define SPLASHIMAGE_ENV_SETTINGS
+#endif
+
 #ifdef CONFIG_VIDEO
 #define CONSOLE_STDOUT_SETTINGS \
 	"stdout=serial,vga\0" \
 	"stderr=serial,vga\0"
-#elif CONFIG_DM_VIDEO
+#else
+#if CONFIG_DM_VIDEO && !defined(CONFIG_SPLASH_SCREEN)
 #define CONSOLE_STDOUT_SETTINGS \
 	"stdout=serial,vidconsole\0" \
 	"stderr=serial,vidconsole\0"
@@ -457,6 +471,7 @@ extern int soft_i2c_gpio_scl;
 #define CONSOLE_STDOUT_SETTINGS \
 	"stdout=serial\0" \
 	"stderr=serial\0"
+#endif
 #endif
 
 #ifdef CONFIG_MTDIDS_DEFAULT
@@ -504,19 +519,6 @@ extern int soft_i2c_gpio_scl;
 #define FDTFILE CONFIG_DEFAULT_DEVICE_TREE ".dtb"
 #endif
 
-#ifdef CONFIG_DM_VIDEO
-#define CONFIG_VIDEO_BMP_RLE8
-#define CONFIG_BMP_16BPP
-#define CONFIG_BMP_24BPP
-#define CONFIG_BMP_32BPP
-#define CONFIG_SPLASH_SCREEN
-#define CONFIG_SPLASH_SOURCE
-#define SPLASHIMAGE_ENV_SETTINGS "splashimage=" __stringify(SDRAM_OFFSET(2000000)) "\0"
-#define CONFIG_ENV_DYNAMIC_DEFAULT
-#else
-#define SPLASHIMAGE_ENV_SETTINGS
-#endif
-
 #define CONFIG_EXTRA_ENV_SETTINGS \
 	CONSOLE_ENV_SETTINGS \
 	SPLASHIMAGE_ENV_SETTINGS \
@@ -538,3 +540,4 @@ extern int soft_i2c_gpio_scl;
 #endif
 
 #endif /* _SUNXI_COMMON_CONFIG_H */
+
