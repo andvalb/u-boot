@@ -8,12 +8,14 @@
  */
 
 #include <init.h>
+#include <net.h>
 #include <asm/io.h>
 #include <asm/arch/clock.h>
 #include <asm/arch/mx6-pins.h>
 #include <asm/arch/imx-regs.h>
 #include <asm/arch/iomux.h>
 #include <asm/arch/sys_proto.h>
+#include <linux/delay.h>
 #include <linux/errno.h>
 #include <asm/gpio.h>
 #include <asm/mach-imx/mxc_i2c.h>
@@ -184,7 +186,7 @@ const char *tqma6_bb_get_boardname(void)
  * Device Tree Support
  */
 #if defined(CONFIG_OF_BOARD_SETUP) && defined(CONFIG_OF_LIBFDT)
-void tqma6_bb_ft_board_setup(void *blob, bd_t *bd)
+void tqma6_bb_ft_board_setup(void *blob, struct bd_info *bd)
 {
  /* TBD */
 }

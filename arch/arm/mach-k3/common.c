@@ -8,10 +8,14 @@
 
 #include <common.h>
 #include <cpu_func.h>
+#include <image.h>
+#include <init.h>
+#include <log.h>
 #include <spl.h>
 #include "common.h"
 #include <dm.h>
 #include <remoteproc.h>
+#include <asm/cache.h>
 #include <linux/soc/ti/ti_sci_protocol.h>
 #include <fdt_support.h>
 #include <asm/arch/sys_proto.h>
@@ -21,6 +25,7 @@
 #include <fs.h>
 #include <env.h>
 #include <elf.h>
+#include <soc.h>
 
 struct ti_sci_handle *get_ti_sci_handle(void)
 {
@@ -55,6 +60,24 @@ void k3_sysfw_print_ver(void)
 	printf("SYSFW ABI: %d.%d (firmware rev 0x%04x '%s')\n",
 	       ti_sci->version.abi_major, ti_sci->version.abi_minor,
 	       ti_sci->version.firmware_revision, fw_desc);
+}
+
+void mmr_unlock(phys_addr_t base, u32 partition)
+{
+	/* Translate the base address */
+	phys_addr_t part_base = base + partition * CTRL_MMR0_PARTITION_SIZE;
+
+	/* Unlock the requested partition if locked using two-step sequence */
+	writel(CTRLMMR_LOCK_KICK0_UNLOCK_VAL, part_base + CTRLMMR_LOCK_KICK0);
+	writel(CTRLMMR_LOCK_KICK1_UNLOCK_VAL, part_base + CTRLMMR_LOCK_KICK1);
+}
+
+bool is_rom_loaded_sysfw(struct rom_extended_boot_data *data)
+{
+	if (strncmp(data->header, K3_ROM_BOOT_HEADER_MAGIC, 7))
+		return false;
+
+	return data->num_components > 1;
 }
 
 DECLARE_GLOBAL_DATA_PTR;
@@ -304,42 +327,51 @@ void reset_cpu(ulong ignored)
 #if defined(CONFIG_DISPLAY_CPUINFO)
 int print_cpuinfo(void)
 {
-	u32 soc, rev;
-	char *name;
-
-	soc = (readl(CTRLMMR_WKUP_JTAG_ID) &
-		JTAG_ID_PARTNO_MASK) >> JTAG_ID_PARTNO_SHIFT;
-	rev = (readl(CTRLMMR_WKUP_JTAG_ID) &
-		JTAG_ID_VARIANT_MASK) >> JTAG_ID_VARIANT_SHIFT;
+	struct udevice *soc;
+	char name[64];
+	int ret;
 
 	printf("SoC:   ");
-	switch (soc) {
-	case AM65X:
-		name = "AM65x";
-		break;
-	case J721E:
-		name = "J721E";
-		break;
-	default:
-		name = "Unknown Silicon";
-	};
 
-	printf("%s SR ", name);
-	switch (rev) {
-	case REV_PG1_0:
-		name = "1.0";
-		break;
-	case REV_PG2_0:
-		name = "2.0";
-		break;
-	default:
-		name = "Unknown Revision";
-	};
-	printf("%s\n", name);
+	ret = soc_get(&soc);
+	if (ret) {
+		printf("UNKNOWN\n");
+		return 0;
+	}
+
+	ret = soc_get_family(soc, name, 64);
+	if (!ret) {
+		printf("%s ", name);
+	}
+
+	ret = soc_get_revision(soc, name, 64);
+	if (!ret) {
+		printf("%s\n", name);
+	}
 
 	return 0;
 }
 #endif
+
+bool soc_is_j721e(void)
+{
+	u32 soc;
+
+	soc = (readl(CTRLMMR_WKUP_JTAG_ID) &
+		JTAG_ID_PARTNO_MASK) >> JTAG_ID_PARTNO_SHIFT;
+
+	return soc == J721E;
+}
+
+bool soc_is_j7200(void)
+{
+	u32 soc;
+
+	soc = (readl(CTRLMMR_WKUP_JTAG_ID) &
+		JTAG_ID_PARTNO_MASK) >> JTAG_ID_PARTNO_SHIFT;
+
+	return soc == J7200;
+}
 
 #ifdef CONFIG_ARM64
 void board_prep_linux(bootm_headers_t *images)
@@ -406,3 +438,38 @@ void remove_fwl_configs(struct fwl_data *fwl_data, size_t fwl_data_size)
 		}
 	}
 }
+
+void spl_enable_dcache(void)
+{
+#if !(defined(CONFIG_SYS_ICACHE_OFF) && defined(CONFIG_SYS_DCACHE_OFF))
+	phys_addr_t ram_top = CONFIG_SYS_SDRAM_BASE;
+
+	dram_init_banksize();
+
+	/* reserve TLB table */
+	gd->arch.tlb_size = PGTABLE_SIZE;
+
+	ram_top += get_effective_memsize();
+	/* keep ram_top in the 32-bit address space */
+	if (ram_top >= 0x100000000)
+		ram_top = (phys_addr_t) 0x100000000;
+
+	gd->arch.tlb_addr = ram_top - gd->arch.tlb_size;
+	debug("TLB table from %08lx to %08lx\n", gd->arch.tlb_addr,
+	      gd->arch.tlb_addr + gd->arch.tlb_size);
+
+	dcache_enable();
+#endif
+}
+
+#if !(defined(CONFIG_SYS_ICACHE_OFF) && defined(CONFIG_SYS_DCACHE_OFF))
+void spl_board_prepare_for_boot(void)
+{
+	dcache_disable();
+}
+
+void spl_board_prepare_for_linux(void)
+{
+	dcache_disable();
+}
+#endif

@@ -7,6 +7,7 @@
  */
 
 #include <common.h>
+#include <log.h>
 #include <asm/io.h>
 #include <dm.h>
 #include <errno.h>
@@ -158,7 +159,7 @@ static int sti_dwc3_glue_bind(struct udevice *dev)
 			dwc3_node = node;
 	}
 
-	if (!ofnode_valid(node)) {
+	if (!ofnode_valid(dwc3_node)) {
 		pr_err("Can't find dwc3 subnode for %s\n", dev->name);
 		return -ENODEV;
 	}
@@ -239,7 +240,7 @@ static const struct udevice_id sti_dwc3_glue_ids[] = {
 
 U_BOOT_DRIVER(dwc3_sti_glue) = {
 	.name = "dwc3_sti_glue",
-	.id = UCLASS_MISC,
+	.id = UCLASS_NOP,
 	.of_match = sti_dwc3_glue_ids,
 	.ofdata_to_platdata = sti_dwc3_glue_ofdata_to_platdata,
 	.probe = sti_dwc3_glue_probe,

@@ -32,8 +32,12 @@ struct fdt_region;
 #define CONFIG_FIT_VERBOSE	1 /* enable fit_format_{error,warning}() */
 #define CONFIG_FIT_ENABLE_RSASSA_PSS_SUPPORT 1
 #define CONFIG_FIT_ENABLE_SHA256_SUPPORT
+#define CONFIG_FIT_ENABLE_SHA384_SUPPORT
+#define CONFIG_FIT_ENABLE_SHA512_SUPPORT
 #define CONFIG_SHA1
 #define CONFIG_SHA256
+#define CONFIG_SHA384
+#define CONFIG_SHA512
 
 #define IMAGE_ENABLE_IGNORE	0
 #define IMAGE_INDENT_STRING	""
@@ -90,6 +94,20 @@ struct fdt_region;
 #define IMAGE_ENABLE_SHA256	1
 #else
 #define IMAGE_ENABLE_SHA256	0
+#endif
+
+#if defined(CONFIG_FIT_ENABLE_SHA384_SUPPORT) || \
+	defined(CONFIG_SPL_SHA384_SUPPORT)
+#define IMAGE_ENABLE_SHA384	1
+#else
+#define IMAGE_ENABLE_SHA384	0
+#endif
+
+#if defined(CONFIG_FIT_ENABLE_SHA512_SUPPORT) || \
+	defined(CONFIG_SPL_SHA512_SUPPORT)
+#define IMAGE_ENABLE_SHA512	1
+#else
+#define IMAGE_ENABLE_SHA512	0
 #endif
 
 #endif /* IMAGE_ENABLE_FIT */
@@ -308,6 +326,7 @@ enum {
 	IH_COMP_LZMA,			/* lzma  Compression Used	*/
 	IH_COMP_LZO,			/* lzo   Compression Used	*/
 	IH_COMP_LZ4,			/* lz4   Compression Used	*/
+	IH_COMP_ZSTD,			/* zstd   Compression Used	*/
 
 	IH_COMP_COUNT,
 };
@@ -393,7 +412,7 @@ typedef struct bootm_headers {
 	ulong		initrd_end;
 	ulong		cmdline_start;
 	ulong		cmdline_end;
-	bd_t		*kbd;
+	struct bd_info		*kbd;
 #endif
 
 	int		verify;		/* env_get("verify")[0] != 'n' */
@@ -451,6 +470,15 @@ typedef struct table_entry {
 	char	*sname;		/* short (input) name to find table entry */
 	char	*lname;		/* long (output) name to print for messages */
 } table_entry_t;
+
+/*
+ * Compression type and magic number mapping table.
+ */
+struct comp_magic_map {
+	int		comp_id;
+	const char	*name;
+	unsigned char	magic[2];
+};
 
 /*
  * get_table_entry_id() scans the translation table trying to find an
@@ -581,10 +609,10 @@ ulong genimg_get_kernel_addr(char * const img_addr);
 int genimg_get_format(const void *img_addr);
 int genimg_has_config(bootm_headers_t *images);
 
-int boot_get_fpga(int argc, char * const argv[], bootm_headers_t *images,
-		uint8_t arch, const ulong *ld_start, ulong * const ld_len);
-int boot_get_ramdisk(int argc, char * const argv[], bootm_headers_t *images,
-		uint8_t arch, ulong *rd_start, ulong *rd_end);
+int boot_get_fpga(int argc, char *const argv[], bootm_headers_t *images,
+		  uint8_t arch, const ulong *ld_start, ulong * const ld_len);
+int boot_get_ramdisk(int argc, char *const argv[], bootm_headers_t *images,
+		     uint8_t arch, ulong *rd_start, ulong *rd_end);
 
 /**
  * boot_get_loadable - routine to load a list of binaries to memory
@@ -607,8 +635,8 @@ int boot_get_ramdisk(int argc, char * const argv[], bootm_headers_t *images,
  *     0, if only valid images or no images are found
  *     error code, if an error occurs during fit_image_load
  */
-int boot_get_loadable(int argc, char * const argv[], bootm_headers_t *images,
-		uint8_t arch, const ulong *ld_start, ulong * const ld_len);
+int boot_get_loadable(int argc, char *const argv[], bootm_headers_t *images,
+		      uint8_t arch, const ulong *ld_start, ulong *const ld_len);
 #endif /* !USE_HOSTCC */
 
 int boot_get_setup_fit(bootm_headers_t *images, uint8_t arch,
@@ -717,7 +745,7 @@ int image_source_script(ulong addr, const char *fit_uname);
 int fit_get_node_from_config(bootm_headers_t *images, const char *prop_name,
 			ulong addr);
 
-int boot_get_fdt(int flag, int argc, char * const argv[], uint8_t arch,
+int boot_get_fdt(int flag, int argc, char *const argv[], uint8_t arch,
 		 bootm_headers_t *images,
 		 char **of_flat_tree, ulong *of_size);
 void boot_fdt_add_mem_rsv_regions(struct lmb *lmb, void *fdt_blob);
@@ -727,7 +755,7 @@ int boot_ramdisk_high(struct lmb *lmb, ulong rd_data, ulong rd_len,
 		  ulong *initrd_start, ulong *initrd_end);
 int boot_get_cmdline(struct lmb *lmb, ulong *cmd_start, ulong *cmd_end);
 #ifdef CONFIG_SYS_BOOT_GET_KBD
-int boot_get_kbd(struct lmb *lmb, bd_t **kbd);
+int boot_get_kbd(struct lmb *lmb, struct bd_info **kbd);
 #endif /* CONFIG_SYS_BOOT_GET_KBD */
 #endif /* !USE_HOSTCC */
 
@@ -867,6 +895,18 @@ static inline int image_check_target_arch(const image_header_t *hdr)
 	return image_check_arch(hdr, IH_ARCH_DEFAULT);
 }
 #endif /* USE_HOSTCC */
+
+/**
+ * image_decomp_type() - Find out compression type of an image
+ *
+ * @buf:	Address in U-Boot memory where image is loaded.
+ * @len:	Length of the compressed image.
+ * @return	compression type or IH_COMP_NONE if not compressed.
+ *
+ * Note: Only following compression types are supported now.
+ * lzo, lzma, gzip, bzip2
+ */
+int image_decomp_type(const unsigned char *buf, ulong len);
 
 /**
  * image_decomp() - decompress an image
@@ -1423,7 +1463,7 @@ struct cipher_algo {
 		       unsigned char **cipher, int *cipher_len);
 
 	int (*add_cipher_data)(struct image_cipher_info *info,
-			       void *keydest);
+			       void *keydest, void *fit, int node_noffset);
 
 	int (*decrypt)(struct image_cipher_info *info,
 		       const void *cipher, size_t cipher_len,

@@ -12,6 +12,8 @@
 #include <efi_loader.h>
 #include <fdtdec.h>
 #include <fdt_support.h>
+#include <log.h>
+#include <part.h>
 #include <video.h>
 #include <asm/global_data.h>
 #include <asm/io.h>
@@ -19,6 +21,7 @@
 #include <asm/arch/display2.h>
 #include <dm/device-internal.h>
 #include <dm/uclass-internal.h>
+#include <linux/bitops.h>
 #include "simplefb_common.h"
 
 DECLARE_GLOBAL_DATA_PTR;
@@ -27,7 +30,7 @@ DECLARE_GLOBAL_DATA_PTR;
 enum {
 	/* Maximum LCD size we support */
 	LCD_MAX_WIDTH		= 1024,
-	LCD_MAX_HEIGHT		= 768,
+	LCD_MAX_HEIGHT		= 1024,
 	LCD_MAX_LOG2_BPP	= VIDEO_BPP32,
 };
 #else
@@ -52,19 +55,21 @@ static void sunxi_de2_composer_init(void)
 	reg_value &= ~(0x01 << 24);
 	writel(reg_value, SUNXI_SRAMC_BASE + 0x04);
 #endif
+
 #if defined(CONFIG_MACH_SUN8I_V3S) || defined(CONFIG_MACH_SUN8I_S3)
-	unsigned int hz = 300000000;
-	int pll = clock_get_pll6() * 2;
-	int div = 1;
-	while ((pll / div) > hz)
-		div++;
-	writel(CCM_DE2_CTRL_GATE | CCM_DE2_CTRL_PLL6_2X | CCM_DE2_CTRL_M(div), &ccm->de_clk_cfg);
+	clock_set_pll3(50000000);
+	/* pll3 is also used for pixelclock and speed will be recomputed */
+	/* Set DE parent to pll3 */
+	clrsetbits_le32(&ccm->de_clk_cfg, CCM_DE2_CTRL_PLL_MASK,
+			CCM_DE2_CTRL_PLL3_V3S);
 #else
 	clock_set_pll10(432000000);
+
 	/* Set DE parent to pll10 */
 	clrsetbits_le32(&ccm->de_clk_cfg, CCM_DE2_CTRL_PLL_MASK,
 			CCM_DE2_CTRL_PLL10);
 #endif
+
 	/* Set ahb gating to pass */
 	setbits_le32(&ccm->ahb_reset1_cfg, 1 << AHB_RESET_OFFSET_DE);
 	setbits_le32(&ccm->ahb_gate1, 1 << AHB_GATE_OFFSET_DE);
@@ -89,7 +94,8 @@ static void sunxi_de2_mode_set(int mux, const struct display_timing *mode,
 	struct de_ui * const de_ui_regs =
 		(struct de_ui *)(de_mux_base +
 				 SUNXI_DE2_MUX_CHAN_REGS +
-				 SUNXI_DE2_MUX_CHAN_SZ * SUNXI_DE2_MUX_CHAN_SZ_COUNT);
+				 SUNXI_DE2_MUX_CHAN_SZ *
+				 (IS_ENABLED(CONFIG_MACH_SUN8I_V3S) ? 2 : 1));
 	struct de_csc * const de_csc_regs =
 		(struct de_csc *)(de_mux_base +
 				  SUNXI_DE2_MUX_DCSC_REGS);
@@ -115,19 +121,21 @@ static void sunxi_de2_mode_set(int mux, const struct display_timing *mode,
 	for (channel = 0; channel < 4; channel++) {
 		void *ch = (void *)(de_mux_base + SUNXI_DE2_MUX_CHAN_REGS +
 				    SUNXI_DE2_MUX_CHAN_SZ * channel);
-		memset(ch, 0, (channel == 0) ?
+		memset(ch, 0, (channel == 0 ||
+			       (IS_ENABLED(CONFIG_MACH_SUN8I_V3S) && channel == 1)) ?
 			sizeof(struct de_vi) : sizeof(struct de_ui));
 	}
 	memset(de_bld_regs, 0, sizeof(struct de_bld));
 
 	writel(0x00000101, &de_bld_regs->fcolor_ctl);
 
-	writel(SUNXI_DE2_BLD_ROUTE, &de_bld_regs->route);
+	writel(IS_ENABLED(CONFIG_MACH_SUN8I_V3S) ? 2 : 1, &de_bld_regs->route);
 
 	writel(0, &de_bld_regs->premultiply);
 	writel(0xff000000, &de_bld_regs->bkcolor);
 
 	writel(0x03010301, &de_bld_regs->bld_mode[0]);
+
 	writel(size, &de_bld_regs->output_size);
 	writel(mode->flags & DISPLAY_FLAGS_INTERLACED ? 2 : 0,
 	       &de_bld_regs->out_ctl);
@@ -237,9 +245,9 @@ static int sunxi_de2_init(struct udevice *dev, ulong fbbase,
 
 #ifdef CONFIG_EFI_LOADER
 	efi_add_memory_map(fbbase,
-			   ALIGN(timing.hactive.typ * timing.vactive.typ *
-			   (1 << l2bpp) / 8, EFI_PAGE_SIZE) >> EFI_PAGE_SHIFT,
-			   EFI_RESERVED_MEMORY_TYPE, false);
+			   timing.hactive.typ * timing.vactive.typ *
+			   (1 << l2bpp) / 8,
+			   EFI_RESERVED_MEMORY_TYPE);
 #endif
 
 	return 0;

@@ -6,6 +6,7 @@
  */
 
 #include <common.h>
+#include <log.h>
 #include <asm/arch/clock-g12a.h>
 #include <asm/io.h>
 #include <clk-uclass.h>
@@ -14,6 +15,8 @@
 #include <syscon.h>
 #include <div64.h>
 #include <dt-bindings/clock/g12a-clkc.h>
+#include <linux/bitops.h>
+#include <linux/delay.h>
 #include <linux/err.h>
 #include <linux/kernel.h>
 #include "clk_meson.h"
@@ -112,6 +115,7 @@ static struct meson_gate gates[NUM_CLKS] = {
 	MESON_GATE(CLKID_I2C, HHI_GCLK_MPEG0, 9),
 	MESON_GATE(CLKID_UART0, HHI_GCLK_MPEG0, 13),
 	MESON_GATE(CLKID_SPICC1, HHI_GCLK_MPEG0, 14),
+	MESON_GATE(CLKID_SD_EMMC_A, HHI_GCLK_MPEG0, 4),
 	MESON_GATE(CLKID_SD_EMMC_B, HHI_GCLK_MPEG0, 25),
 	MESON_GATE(CLKID_SD_EMMC_C, HHI_GCLK_MPEG0, 26),
 	MESON_GATE(CLKID_ETH, HHI_GCLK_MPEG1, 3),
@@ -127,6 +131,7 @@ static struct meson_gate gates[NUM_CLKS] = {
 	MESON_GATE(CLKID_FCLK_DIV4, HHI_FIX_PLL_CNTL1, 21),
 	MESON_GATE(CLKID_FCLK_DIV5, HHI_FIX_PLL_CNTL1, 22),
 	MESON_GATE(CLKID_FCLK_DIV7, HHI_FIX_PLL_CNTL1, 23),
+	MESON_GATE(CLKID_SD_EMMC_A_CLK0, HHI_SD_EMMC_CLK_CNTL, 7),
 	MESON_GATE(CLKID_SD_EMMC_B_CLK0, HHI_SD_EMMC_CLK_CNTL, 23),
 	MESON_GATE(CLKID_SD_EMMC_C_CLK0, HHI_NAND_CLK_CNTL, 7),
 	MESON_GATE(CLKID_VPU_0, HHI_VPU_CLK_CNTL, 8),

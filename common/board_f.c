@@ -11,6 +11,7 @@
 
 #include <common.h>
 #include <bloblist.h>
+#include <bootstage.h>
 #include <clock_legacy.h>
 #include <console.h>
 #include <cpu.h>
@@ -25,6 +26,7 @@
 #include <init.h>
 #include <initcall.h>
 #include <lcd.h>
+#include <log.h>
 #include <malloc.h>
 #include <mapmem.h>
 #include <os.h>
@@ -40,6 +42,7 @@
 #include <trace.h>
 #include <video.h>
 #include <watchdog.h>
+#include <asm/cache.h>
 #ifdef CONFIG_MACH_TYPE
 #include <asm/mach-types.h>
 #endif
@@ -183,11 +186,11 @@ static int print_cpuinfo(void)
 	char desc[512];
 	int ret;
 
-	ret = uclass_first_device_err(UCLASS_CPU, &dev);
-	if (ret) {
-		debug("%s: Could not get CPU device (err = %d)\n",
-		      __func__, ret);
-		return ret;
+	dev = cpu_get_current_dev();
+	if (!dev) {
+		debug("%s: Could not get CPU device\n",
+		      __func__);
+		return -ENODEV;
 	}
 
 	ret = cpu_get_desc(dev, desc, sizeof(desc));
@@ -212,8 +215,6 @@ static int announce_dram_init(void)
 static int show_dram_config(void)
 {
 	unsigned long long size;
-
-#ifdef CONFIG_NR_DRAM_BANKS
 	int i;
 
 	debug("\nRAM Configuration:\n");
@@ -226,9 +227,6 @@ static int show_dram_config(void)
 #endif
 	}
 	debug("\nDRAM:  ");
-#else
-	size = gd->ram_size;
-#endif
 
 	print_size(size, "");
 	board_add_ram_info(0);
@@ -239,10 +237,8 @@ static int show_dram_config(void)
 
 __weak int dram_init_banksize(void)
 {
-#if defined(CONFIG_NR_DRAM_BANKS) && defined(CONFIG_SYS_SDRAM_BASE)
-	gd->bd->bi_dram[0].start = CONFIG_SYS_SDRAM_BASE;
+	gd->bd->bi_dram[0].start = gd->ram_base;
 	gd->bd->bi_dram[0].size = get_effective_memsize();
-#endif
 
 	return 0;
 }
@@ -251,11 +247,7 @@ __weak int dram_init_banksize(void)
 static int init_func_i2c(void)
 {
 	puts("I2C:   ");
-#ifdef CONFIG_SYS_I2C
 	i2c_init_all();
-#else
-	i2c_init(CONFIG_SYS_I2C_SPEED, CONFIG_SYS_I2C_SLAVE);
-#endif
 	puts("ready\n");
 	return 0;
 }
@@ -309,7 +301,7 @@ __weak int mach_cpu_init(void)
 /* Get the top of usable RAM */
 __weak ulong board_get_usable_ram_top(ulong total_size)
 {
-#ifdef CONFIG_SYS_SDRAM_BASE
+#if defined(CONFIG_SYS_SDRAM_BASE) && CONFIG_SYS_SDRAM_BASE > 0
 	/*
 	 * Detect whether we have so much RAM that it goes past the end of our
 	 * 32-bit address space. If so, clip the usable RAM so it doesn't.
@@ -385,33 +377,10 @@ static int reserve_round_4k(void)
 	return 0;
 }
 
-#ifdef CONFIG_ARM
-__weak int reserve_mmu(void)
+__weak int arch_reserve_mmu(void)
 {
-#if !(CONFIG_IS_ENABLED(SYS_ICACHE_OFF) && CONFIG_IS_ENABLED(SYS_DCACHE_OFF))
-	/* reserve TLB table */
-	gd->arch.tlb_size = PGTABLE_SIZE;
-	gd->relocaddr -= gd->arch.tlb_size;
-
-	/* round down to next 64 kB limit */
-	gd->relocaddr &= ~(0x10000 - 1);
-
-	gd->arch.tlb_addr = gd->relocaddr;
-	debug("TLB table from %08lx to %08lx\n", gd->arch.tlb_addr,
-	      gd->arch.tlb_addr + gd->arch.tlb_size);
-
-#ifdef CONFIG_SYS_MEM_RESERVE_SECURE
-	/*
-	 * Record allocated tlb_addr in case gd->tlb_addr to be overwritten
-	 * with location within secure ram.
-	 */
-	gd->arch.tlb_allocated = gd->arch.tlb_addr;
-#endif
-#endif
-
 	return 0;
 }
-#endif
 
 static int reserve_video(void)
 {
@@ -522,11 +491,12 @@ static int reserve_malloc(void)
 static int reserve_board(void)
 {
 	if (!gd->bd) {
-		gd->start_addr_sp = reserve_stack_aligned(sizeof(bd_t));
-		gd->bd = (bd_t *)map_sysmem(gd->start_addr_sp, sizeof(bd_t));
-		memset(gd->bd, '\0', sizeof(bd_t));
+		gd->start_addr_sp = reserve_stack_aligned(sizeof(struct bd_info));
+		gd->bd = (struct bd_info *)map_sysmem(gd->start_addr_sp,
+						      sizeof(struct bd_info));
+		memset(gd->bd, '\0', sizeof(struct bd_info));
 		debug("Reserving %zu Bytes for Board Info at: %08lx\n",
-		      sizeof(bd_t), gd->start_addr_sp);
+		      sizeof(struct bd_info), gd->start_addr_sp);
 	}
 	return 0;
 }
@@ -557,7 +527,7 @@ static int reserve_fdt(void)
 	 * will be relocated with other data.
 	 */
 	if (gd->fdt_blob) {
-		gd->fdt_size = ALIGN(fdt_totalsize(gd->fdt_blob) + 0x1000, 32);
+		gd->fdt_size = ALIGN(fdt_totalsize(gd->fdt_blob), 32);
 
 		gd->start_addr_sp = reserve_stack_aligned(gd->fdt_size);
 		gd->new_fdt = map_sysmem(gd->start_addr_sp, gd->fdt_size);
@@ -617,62 +587,22 @@ static int display_new_sp(void)
 	return 0;
 }
 
-#if defined(CONFIG_M68K) || defined(CONFIG_MIPS) || defined(CONFIG_PPC) || \
-	defined(CONFIG_SH)
-static int setup_board_part1(void)
+__weak int arch_setup_bdinfo(void)
 {
-	bd_t *bd = gd->bd;
-
-	/*
-	 * Save local variables to board info struct
-	 */
-	bd->bi_memstart = CONFIG_SYS_SDRAM_BASE;	/* start of memory */
-	bd->bi_memsize = gd->ram_size;			/* size in bytes */
-
-#ifdef CONFIG_SYS_SRAM_BASE
-	bd->bi_sramstart = CONFIG_SYS_SRAM_BASE;	/* start of SRAM */
-	bd->bi_sramsize = CONFIG_SYS_SRAM_SIZE;		/* size  of SRAM */
-#endif
-
-#if defined(CONFIG_E500) || defined(CONFIG_MPC86xx)
-	bd->bi_immr_base = CONFIG_SYS_IMMR;	/* base  of IMMR register     */
-#endif
-#if defined(CONFIG_M68K)
-	bd->bi_mbar_base = CONFIG_SYS_MBAR;	/* base of internal registers */
-#endif
-#if defined(CONFIG_MPC83xx)
-	bd->bi_immrbar = CONFIG_SYS_IMMR;
-#endif
-
 	return 0;
 }
-#endif
 
-#if defined(CONFIG_PPC) || defined(CONFIG_M68K)
-static int setup_board_part2(void)
+int setup_bdinfo(void)
 {
-	bd_t *bd = gd->bd;
+	struct bd_info *bd = gd->bd;
 
-	bd->bi_intfreq = gd->cpu_clk;	/* Internal Freq, in Hz */
-	bd->bi_busfreq = gd->bus_clk;	/* Bus Freq,      in Hz */
-#if defined(CONFIG_CPM2)
-	bd->bi_cpmfreq = gd->arch.cpm_clk;
-	bd->bi_brgfreq = gd->arch.brg_clk;
-	bd->bi_sccfreq = gd->arch.scc_clk;
-	bd->bi_vco = gd->arch.vco_out;
-#endif /* CONFIG_CPM2 */
-#if defined(CONFIG_M68K) && defined(CONFIG_PCI)
-	bd->bi_pcifreq = gd->pci_clk;
-#endif
-#if defined(CONFIG_EXTRA_CLOCK)
-	bd->bi_inpfreq = gd->arch.inp_clk;	/* input Freq in Hz */
-	bd->bi_vcofreq = gd->arch.vco_clk;	/* vco Freq in Hz */
-	bd->bi_flbfreq = gd->arch.flb_clk;	/* flexbus Freq in Hz */
-#endif
+	if (IS_ENABLED(CONFIG_SYS_HAS_SRAM)) {
+		bd->bi_sramstart = CONFIG_SYS_SRAM_BASE; /* start of SRAM */
+		bd->bi_sramsize = CONFIG_SYS_SRAM_SIZE;  /* size  of SRAM */
+	}
 
-	return 0;
+	return arch_setup_bdinfo();
 }
-#endif
 
 #ifdef CONFIG_POST
 static int init_post(void)
@@ -690,7 +620,7 @@ static int reloc_fdt(void)
 	if (gd->flags & GD_FLG_SKIP_RELOC)
 		return 0;
 	if (gd->new_fdt) {
-		memcpy(gd->new_fdt, gd->fdt_blob, gd->fdt_size);
+		memcpy(gd->new_fdt, gd->fdt_blob, fdt_totalsize(gd->fdt_blob));
 		gd->fdt_blob = gd->new_fdt;
 	}
 #endif
@@ -845,9 +775,9 @@ static int initf_dm(void)
 #if defined(CONFIG_DM) && CONFIG_VAL(SYS_MALLOC_F_LEN)
 	int ret;
 
-	bootstage_start(BOOTSTATE_ID_ACCUM_DM_F, "dm_f");
+	bootstage_start(BOOTSTAGE_ID_ACCUM_DM_F, "dm_f");
 	ret = dm_init_and_scan(true);
-	bootstage_accum(BOOTSTATE_ID_ACCUM_DM_F);
+	bootstage_accum(BOOTSTAGE_ID_ACCUM_DM_F);
 	if (ret)
 		return ret;
 #endif
@@ -975,13 +905,14 @@ static const init_fnc_t init_sequence_f[] = {
 	 *  - board info struct
 	 */
 	setup_dest_addr,
+#ifdef CONFIG_OF_BOARD_FIXUP
+	fix_fdt,
+#endif
 #ifdef CONFIG_PRAM
 	reserve_pram,
 #endif
 	reserve_round_4k,
-#ifdef CONFIG_ARM
-	reserve_mmu,
-#endif
+	arch_reserve_mmu,
 	reserve_video,
 	reserve_trace,
 	reserve_uboot,
@@ -996,18 +927,9 @@ static const init_fnc_t init_sequence_f[] = {
 	reserve_stacks,
 	dram_init_banksize,
 	show_dram_config,
-#if defined(CONFIG_M68K) || defined(CONFIG_MIPS) || defined(CONFIG_PPC) || \
-	defined(CONFIG_SH)
-	setup_board_part1,
-#endif
-#if defined(CONFIG_PPC) || defined(CONFIG_M68K)
 	INIT_FUNC_WATCHDOG_RESET
-	setup_board_part2,
-#endif
+	setup_bdinfo,
 	display_new_sp,
-#ifdef CONFIG_OF_BOARD_FIXUP
-	fix_fdt,
-#endif
 	INIT_FUNC_WATCHDOG_RESET
 	reloc_fdt,
 	reloc_bootstage,

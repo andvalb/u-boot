@@ -15,6 +15,7 @@
 #include <dm/lists.h>
 #include <dm/device-internal.h>
 #include <dm/of_access.h>
+#include <linux/delay.h>
 
 DECLARE_GLOBAL_DATA_PTR;
 
@@ -169,9 +170,9 @@ int serial_init(void)
 }
 
 /* Called after relocation */
-void serial_initialize(void)
+int serial_initialize(void)
 {
-	serial_init();
+	return serial_init();
 }
 
 static void _serial_putc(struct udevice *dev, char ch)

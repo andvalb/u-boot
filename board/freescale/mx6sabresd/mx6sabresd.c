@@ -5,7 +5,9 @@
  * Author: Fabio Estevam <fabio.estevam@freescale.com>
  */
 
+#include <image.h>
 #include <init.h>
+#include <net.h>
 #include <asm/arch/clock.h>
 #include <asm/arch/imx-regs.h>
 #include <asm/arch/iomux.h>
@@ -248,7 +250,7 @@ int board_mmc_getcd(struct mmc *mmc)
 	return ret;
 }
 
-int board_mmc_init(bd_t *bis)
+int board_mmc_init(struct bd_info *bis)
 {
 	struct src *psrc = (struct src *)SRC_BASE_ADDR;
 	unsigned reg = readl(&psrc->sbmr1) >> 11;

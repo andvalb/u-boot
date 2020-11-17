@@ -6,6 +6,7 @@
 #include <common.h>
 #include <div64.h>
 #include <dm.h>
+#include <log.h>
 #include <pwm.h>
 #include <regmap.h>
 #include <syscon.h>
@@ -47,6 +48,8 @@ static int sunxi_pwm_config_pinmux(void)
 {
 #ifdef CONFIG_MACH_SUN50I
 	sunxi_gpio_set_cfgpin(SUNXI_GPD(22), SUNXI_GPD_PWM);
+#elif defined CONFIG_MACH_SUN8I_V3S
+	sunxi_gpio_set_cfgpin(SUNXI_GPB(4), SUN8I_V3S_GPB_PWM0);
 #endif
 #if defined(CONFIG_MACH_SUN8I_V3S) || defined(CONFIG_MACH_SUN8I_S3)
 	sunxi_gpio_set_cfgpin(SUNXI_GPB(4), SUN4I_GPB_PWM);
@@ -154,7 +157,7 @@ static int sunxi_pwm_ofdata_to_platdata(struct udevice *dev)
 {
 	struct sunxi_pwm_priv *priv = dev_get_priv(dev);
 
-	priv->regs = (struct sunxi_pwm *)devfdt_get_addr(dev);
+	priv->regs = dev_read_addr_ptr(dev);
 
 	return 0;
 }
@@ -173,6 +176,7 @@ static const struct pwm_ops sunxi_pwm_ops = {
 static const struct udevice_id sunxi_pwm_ids[] = {
 	{ .compatible = "allwinner,sun5i-a13-pwm" },
 	{ .compatible = "allwinner,sun50i-a64-pwm" },
+	{ .compatible = "allwinner,sun7i-a20-pwm" },
 	{ }
 };
 

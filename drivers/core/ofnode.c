@@ -8,6 +8,7 @@
 #include <dm.h>
 #include <fdtdec.h>
 #include <fdt_support.h>
+#include <log.h>
 #include <malloc.h>
 #include <linux/libfdt.h>
 #include <dm/of_access.h>
@@ -408,7 +409,8 @@ int ofnode_parse_phandle_with_args(ofnode node, const char *list_name,
 		int ret;
 
 		ret = of_parse_phandle_with_args(ofnode_to_np(node),
-						 list_name, cells_name, index,
+						 list_name, cells_name,
+						 cell_count, index,
 						 &args);
 		if (ret)
 			return ret;
@@ -430,15 +432,15 @@ int ofnode_parse_phandle_with_args(ofnode node, const char *list_name,
 }
 
 int ofnode_count_phandle_with_args(ofnode node, const char *list_name,
-				   const char *cells_name)
+				   const char *cells_name, int cell_count)
 {
 	if (ofnode_is_np(node))
 		return of_count_phandle_with_args(ofnode_to_np(node),
-				list_name, cells_name);
+				list_name, cells_name, cell_count);
 	else
 		return fdtdec_parse_phandle_with_args(gd->fdt_blob,
 				ofnode_to_offset(node), list_name, cells_name,
-				0, -1, NULL);
+				cell_count, -1, NULL);
 }
 
 ofnode ofnode_path(const char *path)
@@ -472,6 +474,17 @@ ofnode ofnode_get_chosen_node(const char *name)
 		return ofnode_null();
 
 	return ofnode_path(prop);
+}
+
+int ofnode_get_child_count(ofnode parent)
+{
+	ofnode child;
+	int num = 0;
+
+	ofnode_for_each_subnode(child, parent)
+		num++;
+
+	return num;
 }
 
 static int decode_timing_property(ofnode node, const char *name,
@@ -764,18 +777,26 @@ int ofnode_read_pci_vendev(ofnode node, u16 *vendor, u16 *device)
 
 int ofnode_read_addr_cells(ofnode node)
 {
-	if (ofnode_is_np(node))
+	if (ofnode_is_np(node)) {
 		return of_n_addr_cells(ofnode_to_np(node));
-	else  /* NOTE: this call should walk up the parent stack */
-		return fdt_address_cells(gd->fdt_blob, ofnode_to_offset(node));
+	} else {
+		int parent = fdt_parent_offset(gd->fdt_blob,
+					       ofnode_to_offset(node));
+
+		return fdt_address_cells(gd->fdt_blob, parent);
+	}
 }
 
 int ofnode_read_size_cells(ofnode node)
 {
-	if (ofnode_is_np(node))
+	if (ofnode_is_np(node)) {
 		return of_n_size_cells(ofnode_to_np(node));
-	else  /* NOTE: this call should walk up the parent stack */
-		return fdt_size_cells(gd->fdt_blob, ofnode_to_offset(node));
+	} else {
+		int parent = fdt_parent_offset(gd->fdt_blob,
+					       ofnode_to_offset(node));
+
+		return fdt_size_cells(gd->fdt_blob, parent);
+	}
 }
 
 int ofnode_read_simple_addr_cells(ofnode node)

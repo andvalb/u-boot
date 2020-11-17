@@ -7,6 +7,7 @@
 
 #include <common.h>
 #include <display.h>
+#include <log.h>
 #include <video_bridge.h>
 #include <backlight.h>
 #include <dm.h>
@@ -31,6 +32,13 @@ static void sunxi_lcdc_config_pinmux(void)
 		sunxi_gpio_set_cfgpin(pin, SUNXI_GPD_LCD0);
 		sunxi_gpio_set_drv(pin, 3);
 	}
+#elif defined(CONFIG_MACH_SUN8I_V3S)
+	int pin;
+
+	for (pin = SUNXI_GPE(0); pin <= SUNXI_GPE(19); pin++)
+		sunxi_gpio_set_cfgpin(pin, SUN8I_V3S_GPE_LCD0);
+	sunxi_gpio_set_cfgpin(SUNXI_GPE(23), SUN8I_V3S_GPE_LCD0);
+	sunxi_gpio_set_cfgpin(SUNXI_GPE(24), SUN8I_V3S_GPE_LCD0);
 #endif
 }
 

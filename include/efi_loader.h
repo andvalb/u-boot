@@ -9,9 +9,14 @@
 #define _EFI_LOADER_H 1
 
 #include <common.h>
+#include <blk.h>
+#include <log.h>
 #include <part_efi.h>
 #include <efi_api.h>
+#include <image.h>
 #include <pe.h>
+
+struct blk_desc;
 
 static inline int guidcmp(const void *g1, const void *g2)
 {
@@ -40,12 +45,26 @@ static inline void *guidcpy(void *dst, const void *src)
 #define U_BOOT_HOST_DEV_GUID \
 	EFI_GUID(0xbbe4e671, 0x5773, 0x4ea1, \
 		 0x9a, 0xab, 0x3a, 0x7d, 0xbf, 0x40, 0xc4, 0x82)
+/* GUID used as root for virtio devices */
+#define U_BOOT_VIRTIO_DEV_GUID \
+	EFI_GUID(0x63293792, 0xadf5, 0x9325, \
+		 0xb9, 0x9f, 0x4e, 0x0e, 0x45, 0x5c, 0x1b, 0x1e)
 
 /* Use internal device tree when starting UEFI application */
 #define EFI_FDT_USE_INTERNAL NULL
 
 /* Root node */
 extern efi_handle_t efi_root;
+
+/* Set to EFI_SUCCESS when initialized */
+extern efi_status_t efi_obj_list_initialized;
+
+/* EFI system partition */
+extern struct efi_system_partition {
+	enum if_type if_type;
+	int devnum;
+	u8 part;
+} efi_system_partition;
 
 int __efi_entry_check(void);
 int __efi_exit_check(void);
@@ -135,7 +154,6 @@ extern const struct efi_hii_config_routing_protocol efi_hii_config_routing;
 extern const struct efi_hii_config_access_protocol efi_hii_config_access;
 extern const struct efi_hii_database_protocol efi_hii_database;
 extern const struct efi_hii_string_protocol efi_hii_string;
-extern const struct efi_rng_protocol efi_rng_protocol;
 
 uint16_t *efi_dp_str(struct efi_device_path *dp);
 
@@ -378,14 +396,21 @@ efi_status_t efi_root_node_register(void);
 efi_status_t efi_initialize_system_table(void);
 /* efi_runtime_detach() - detach unimplemented runtime functions */
 void efi_runtime_detach(void);
+/* efi_convert_pointer() - convert pointer to virtual address */
+efi_status_t EFIAPI efi_convert_pointer(efi_uintn_t debug_disposition,
+					void **address);
 /* Called by bootefi to make console interface available */
 efi_status_t efi_console_register(void);
 /* Called by bootefi to make all disk storage accessible as EFI objects */
 efi_status_t efi_disk_register(void);
+/* Called by efi_init_obj_list() to install EFI_RNG_PROTOCOL */
+efi_status_t efi_rng_register(void);
 /* Create handles and protocols for the partitions of a block device */
 int efi_disk_create_partitions(efi_handle_t parent, struct blk_desc *desc,
 			       const char *if_typename, int diskid,
 			       const char *pdevname);
+/* Check if it is EFI system partition */
+bool efi_disk_is_system_part(efi_handle_t handle);
 /* Called by bootefi to make GOP (graphical) interface available */
 efi_status_t efi_gop_register(void);
 /* Called by bootefi to make the network interface available */
@@ -535,8 +560,7 @@ efi_status_t efi_get_memory_map(efi_uintn_t *memory_map_size,
 				efi_uintn_t *descriptor_size,
 				uint32_t *descriptor_version);
 /* Adds a range into the EFI memory map */
-efi_status_t efi_add_memory_map(uint64_t start, uint64_t pages, int memory_type,
-				bool overlap_only_ram);
+efi_status_t efi_add_memory_map(u64 start, u64 size, int memory_type);
 /* Adds a conventional range into the EFI memory map */
 efi_status_t efi_add_conventional_memory_map(u64 ram_start, u64 ram_end,
 					     u64 ram_top);
@@ -608,6 +632,8 @@ efi_status_t efi_dp_from_name(const char *dev, const char *devnr,
 			      const char *path,
 			      struct efi_device_path **device,
 			      struct efi_device_path **file);
+ssize_t efi_dp_check_length(const struct efi_device_path *dp,
+			    const size_t maxlen);
 
 #define EFI_DP_TYPE(_dp, _type, _subtype) \
 	(((_dp)->type == DEVICE_PATH_TYPE_##_type) && \
@@ -691,12 +717,13 @@ struct efi_load_option {
 	const u8 *optional_data;
 };
 
-void efi_deserialize_load_option(struct efi_load_option *lo, u8 *data);
+efi_status_t efi_deserialize_load_option(struct efi_load_option *lo, u8 *data,
+					 efi_uintn_t *size);
 unsigned long efi_serialize_load_option(struct efi_load_option *lo, u8 **data);
-efi_status_t efi_bootmgr_load(efi_handle_t *handle);
-
-#ifdef CONFIG_EFI_SECURE_BOOT
-#include <image.h>
+efi_status_t efi_set_load_options(efi_handle_t handle,
+				  efi_uintn_t load_options_size,
+				  void *load_options);
+efi_status_t efi_bootmgr_load(efi_handle_t *handle, void **load_options);
 
 /**
  * efi_image_regions - A list of memory regions
@@ -747,14 +774,20 @@ struct efi_signature_store {
 struct x509_certificate;
 struct pkcs7_message;
 
-bool efi_signature_verify_cert(struct x509_certificate *cert,
-			       struct efi_signature_store *dbx);
-bool efi_signature_verify_signers(struct pkcs7_message *msg,
-				  struct efi_signature_store *dbx);
-bool efi_signature_verify_with_sigdb(struct efi_image_regions *regs,
-				     struct pkcs7_message *msg,
-				  struct efi_signature_store *db,
-				  struct x509_certificate **cert);
+bool efi_signature_lookup_digest(struct efi_image_regions *regs,
+				 struct efi_signature_store *db);
+bool efi_signature_verify(struct efi_image_regions *regs,
+			  struct pkcs7_message *msg,
+			  struct efi_signature_store *db,
+			  struct efi_signature_store *dbx);
+static inline bool efi_signature_verify_one(struct efi_image_regions *regs,
+					    struct pkcs7_message *msg,
+					    struct efi_signature_store *db)
+{
+	return efi_signature_verify(regs, msg, db, NULL);
+}
+bool efi_signature_check_signers(struct pkcs7_message *msg,
+				 struct efi_signature_store *dbx);
 
 efi_status_t efi_image_region_add(struct efi_image_regions *regs,
 				  const void *start, const void *end,
@@ -767,7 +800,9 @@ bool efi_secure_boot_enabled(void);
 
 bool efi_image_parse(void *efi, size_t len, struct efi_image_regions **regp,
 		     WIN_CERTIFICATE **auth, size_t *auth_len);
-#endif /* CONFIG_EFI_SECURE_BOOT */
+
+/* runtime implementation of memcpy() */
+void efi_memcpy_runtime(void *dest, const void *src, size_t n);
 
 #else /* CONFIG_IS_ENABLED(EFI_LOADER) */
 

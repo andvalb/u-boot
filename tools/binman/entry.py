@@ -4,21 +4,17 @@
 # Base class for all entries
 #
 
-from __future__ import print_function
-
 from collections import namedtuple
 import importlib
 import os
 import sys
 
-import fdt_util
-import tools
-from tools import ToHex, ToHexSize
-import tout
+from dtoc import fdt_util
+from patman import tools
+from patman.tools import ToHex, ToHexSize
+from patman import tout
 
 modules = {}
-
-our_path = os.path.dirname(os.path.realpath(__file__))
 
 
 # An argument which can be passed to entries on the command line, in lieu of
@@ -61,11 +57,15 @@ class Entry(object):
         compress: Compression algoithm used (e.g. 'lz4'), 'none' if none
         orig_offset: Original offset value read from node
         orig_size: Original size value read from node
+        missing: True if this entry is missing its contents
+        allow_missing: Allow children of this entry to be missing (used by
+            subclasses such as Entry_section)
+        external: True if this entry contains an external binary blob
     """
     def __init__(self, section, etype, node, name_prefix=''):
         # Put this here to allow entry-docs and help to work without libfdt
         global state
-        import state
+        from binman import state
 
         self.section = section
         self.etype = etype
@@ -86,6 +86,9 @@ class Entry(object):
         self.image_pos = None
         self._expand_size = False
         self.compress = 'none'
+        self.missing = False
+        self.external = False
+        self.allow_missing = False
 
     @staticmethod
     def Lookup(node_path, etype):
@@ -110,15 +113,11 @@ class Entry(object):
 
         # Import the module if we have not already done so.
         if not module:
-            old_path = sys.path
-            sys.path.insert(0, os.path.join(our_path, 'etype'))
             try:
-                module = importlib.import_module(module_name)
+                module = importlib.import_module('binman.etype.' + module_name)
             except ImportError as e:
                 raise ValueError("Unknown entry type '%s' in node '%s' (expected etype/%s.py, error '%s'" %
                                  (etype, node_path, module_name, e))
-            finally:
-                sys.path = old_path
             modules[module_name] = module
 
         # Look up the expected class name
@@ -179,6 +178,7 @@ class Entry(object):
         self.align_end = fdt_util.GetInt(self._node, 'align-end')
         self.offset_unset = fdt_util.GetBool(self._node, 'offset-unset')
         self.expand_size = fdt_util.GetBool(self._node, 'expand-size')
+        self.missing_msg = fdt_util.GetString(self._node, 'missing-msg')
 
     def GetDefaultFilename(self):
         return None
@@ -592,9 +592,7 @@ features to produce new behaviours.
             modules.remove('_testing')
         missing = []
         for name in modules:
-            if name.startswith('__'):
-                continue
-            module = Entry.Lookup(name, name)
+            module = Entry.Lookup('WriteDocs', name)
             docs = getattr(module, '__doc__')
             if test_missing == name:
                 docs = None
@@ -802,3 +800,39 @@ features to produce new behaviours.
             elif self == entries[-1]:
                 return 'end'
         return 'middle'
+
+    def SetAllowMissing(self, allow_missing):
+        """Set whether a section allows missing external blobs
+
+        Args:
+            allow_missing: True if allowed, False if not allowed
+        """
+        # This is meaningless for anything other than sections
+        pass
+
+    def CheckMissing(self, missing_list):
+        """Check if any entries in this section have missing external blobs
+
+        If there are missing blobs, the entries are added to the list
+
+        Args:
+            missing_list: List of Entry objects to be added to
+        """
+        if self.missing:
+            missing_list.append(self)
+
+    def GetAllowMissing(self):
+        """Get whether a section allows missing external blobs
+
+        Returns:
+            True if allowed, False if not allowed
+        """
+        return self.allow_missing
+
+    def GetHelpTags(self):
+        """Get the tags use for missing-blob help
+
+        Returns:
+            list of possible tags, most desirable first
+        """
+        return list(filter(None, [self.missing_msg, self.name, self.etype]))

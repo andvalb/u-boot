@@ -10,8 +10,10 @@
 #include <fpga.h>
 #include <gzip.h>
 #include <image.h>
+#include <log.h>
 #include <malloc.h>
 #include <spl.h>
+#include <asm/cache.h>
 #include <linux/libfdt.h>
 
 DECLARE_GLOBAL_DATA_PTR;
@@ -251,7 +253,7 @@ static int spl_load_fit_image(struct spl_load_info *info, ulong sector,
 	const void *data;
 	bool external_data = false;
 
-	if (IS_ENABLED(CONFIG_SPL_FPGA_SUPPORT) ||
+	if (IS_ENABLED(CONFIG_SPL_FPGA) ||
 	    (IS_ENABLED(CONFIG_SPL_OS_BOOT) && IS_ENABLED(CONFIG_SPL_GZIP))) {
 		if (fit_image_get_type(fit, node, &type))
 			puts("Cannot get image type.\n");
@@ -347,9 +349,12 @@ static int spl_fit_append_fdt(struct spl_image_info *spl_image,
 
 	/*
 	 * Use the address following the image as target address for the
-	 * device tree.
+	 * device tree. Load address is aligned to 8 bytes to match the required
+	 * alignment specified for linux arm [1] and arm 64 [2] booting
+	 * [1]: https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/tree/Documentation/arm/booting.rst#n126
+	 * [2]: https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/tree/Documentation/arm64/booting.rst#n45
 	 */
-	image_info.load_addr = spl_image->load_addr + spl_image->size;
+	image_info.load_addr = ALIGN(spl_image->load_addr + spl_image->size, 8);
 
 	/* Figure out which device tree the board wants to use */
 	node = spl_fit_get_image_node(fit, images, FIT_FDT_PROP, index++);
@@ -425,8 +430,7 @@ static int spl_fit_append_fdt(struct spl_image_info *spl_image,
 			debug("%s: DT overlay %s applied\n", __func__,
 			      fit_get_name(fit, node, NULL));
 		}
-		if (tmpbuffer)
-			free(tmpbuffer);
+		free(tmpbuffer);
 		if (ret)
 			return ret;
 	}
@@ -542,7 +546,7 @@ int spl_load_simple_fit(struct spl_image_info *spl_image,
 		return -1;
 	}
 
-#ifdef CONFIG_SPL_FPGA_SUPPORT
+#ifdef CONFIG_SPL_FPGA
 	node = spl_fit_get_image_node(fit, images, "fpga", 0);
 	if (node >= 0) {
 		/* Load the image and set up the spl_image structure */
@@ -618,9 +622,12 @@ int spl_load_simple_fit(struct spl_image_info *spl_image,
 	 * Booting a next-stage U-Boot may require us to append the FDT.
 	 * We allow this to fail, as the U-Boot image might embed its FDT.
 	 */
-	if (spl_image->os == IH_OS_U_BOOT)
-		spl_fit_append_fdt(spl_image, info, sector, fit,
-				   images, base_offset);
+	if (spl_image->os == IH_OS_U_BOOT) {
+		ret = spl_fit_append_fdt(spl_image, info, sector, fit,
+					 images, base_offset);
+		if (!IS_ENABLED(CONFIG_OF_EMBED) && ret < 0)
+			return ret;
+	}
 
 	firmware_node = node;
 	/* Now check if there are more images for us to load */

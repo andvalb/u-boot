@@ -7,8 +7,10 @@
  */
 
 #include <common.h>
+#include <log.h>
 #include <malloc.h>
 #include <asm/io.h>
+#include <linux/delay.h>
 #include <linux/errno.h>
 #include <nand.h>
 #include <linux/ioport.h>
@@ -845,7 +847,7 @@ static void zynq_nand_cmd_function(struct mtd_info *mtd, unsigned int command,
 	if (curr_cmd->end_cmd_valid == ZYNQ_NAND_CMD_PHASE)
 		end_cmd_valid = 1;
 
-	if (curr_cmd->end_cmd == NAND_CMD_NONE)
+	if (curr_cmd->end_cmd == (u8)NAND_CMD_NONE)
 		end_cmd = 0x0;
 	else
 		end_cmd = curr_cmd->end_cmd;
@@ -1280,7 +1282,7 @@ static const struct udevice_id zynq_nand_dt_ids[] = {
 };
 
 U_BOOT_DRIVER(zynq_nand) = {
-	.name = "zynq-nand",
+	.name = "zynq_nand",
 	.id = UCLASS_MTD,
 	.of_match = zynq_nand_dt_ids,
 	.probe = zynq_nand_probe,

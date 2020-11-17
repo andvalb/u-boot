@@ -6,6 +6,7 @@
 #include <common.h>
 #include <clock_legacy.h>
 #include <dm.h>
+#include <init.h>
 #include <dm/platform_data/serial_pl01x.h>
 #include <i2c.h>
 #include <malloc.h>
@@ -15,7 +16,9 @@
 #include <fsl_sec.h>
 #include <asm/io.h>
 #include <fdt_support.h>
+#include <linux/bitops.h>
 #include <linux/libfdt.h>
+#include <linux/delay.h>
 #include <fsl-mc/fsl_mc.h>
 #include <env_internal.h>
 #include <efi_loader.h>
@@ -29,14 +32,11 @@
 #include "../common/vid.h"
 #include <fsl_immap.h>
 #include <asm/arch-fsl-layerscape/fsl_icid.h>
-#include <asm/gic-v3.h>
-#include <cpu_func.h>
 
 #ifdef CONFIG_EMC2305
 #include "../common/emc2305.h"
 #endif
 
-#define GIC_LPI_SIZE                             0x200000
 #ifdef CONFIG_TARGET_LX2160AQDS
 #define CFG_MUX_I2C_SDHC(reg, value)		((reg & 0x3f) | value)
 #define SET_CFG_MUX1_SDHC1_SDHC(reg)		(reg & 0x3f)
@@ -114,8 +114,8 @@ int board_early_init_f(void)
 
 #ifdef CONFIG_EMC2305
 	select_i2c_ch_pca9547(I2C_MUX_CH_EMC2305);
-	emc2305_init();
-	set_fan_speed(I2C_EMC2305_PWM);
+	emc2305_init(I2C_EMC2305_ADDR);
+	set_fan_speed(I2C_EMC2305_PWM, I2C_EMC2305_ADDR);
 	select_i2c_ch_pca9547(I2C_MUX_CH_DEFAULT);
 #endif
 
@@ -380,7 +380,7 @@ int checkboard(void)
  */
 u8 qixis_esdhc_detect_quirk(void)
 {
-	/* for LX2160AQDS res1[1] @ offset 0x1A is SDHC1 Control/Status (SDHC1)
+	/*
 	 * SDHC1 Card ID:
 	 * Specifies the type of card installed in the SDHC1 adapter slot.
 	 * 000= (reserved)
@@ -392,8 +392,33 @@ u8 qixis_esdhc_detect_quirk(void)
 	 * 110= SDCard V2/V3 adapter installed.
 	 * 111= no adapter is installed.
 	 */
-	return ((QIXIS_READ(res1[1]) & QIXIS_SDID_MASK) !=
+	return ((QIXIS_READ(sdhc1) & QIXIS_SDID_MASK) !=
 		 QIXIS_ESDHC_NO_ADAPTER);
+}
+
+static void esdhc_adapter_card_ident(void)
+{
+	u8 card_id, val;
+
+	val = QIXIS_READ(sdhc1);
+	card_id = val & QIXIS_SDID_MASK;
+
+	switch (card_id) {
+	case QIXIS_ESDHC_ADAPTER_TYPE_SD:
+		/* Power cycle to card */
+		val &= ~QIXIS_SDHC1_S1V3;
+		QIXIS_WRITE(sdhc1, val);
+		mdelay(1);
+		val |= QIXIS_SDHC1_S1V3;
+		QIXIS_WRITE(sdhc1, val);
+		/* Route to SDHC1_VS */
+		val = QIXIS_READ(brdcfg[11]);
+		val |= QIXIS_SDHC1_VS;
+		QIXIS_WRITE(brdcfg[11], val);
+		break;
+	default:
+		break;
+	}
 }
 
 int config_board_mux(void)
@@ -502,6 +527,12 @@ int config_board_mux(void)
 
 	return 0;
 }
+
+int board_early_init_r(void)
+{
+	esdhc_adapter_card_ident();
+	return 0;
+}
 #elif defined(CONFIG_TARGET_LX2160ARDB)
 int config_board_mux(void)
 {
@@ -587,6 +618,9 @@ int board_init(void)
 	sec_init();
 #endif
 
+#if !defined(CONFIG_SYS_EARLY_PCI_INIT) && defined(CONFIG_DM_ETH)
+	pci_init();
+#endif
 	return 0;
 }
 
@@ -632,7 +666,9 @@ void fdt_fixup_board_enet(void *fdt)
 	if (get_mc_boot_status() == 0 &&
 	    (is_lazy_dpl_addr_valid() || get_dpl_apply_status() == 0)) {
 		fdt_status_okay(fdt, offset);
+#ifndef CONFIG_DM_ETH
 		fdt_fixup_board_phy(fdt);
+#endif
 	} else {
 		fdt_status_fail(fdt, offset);
 	}
@@ -644,23 +680,8 @@ void board_quiesce_devices(void)
 }
 #endif
 
-#ifdef CONFIG_GIC_V3_ITS
-void fdt_fixup_gic_lpi_memory(void *blob, u64 gic_lpi_base)
-{
-	u32 phandle;
-	int err;
-	struct fdt_memory gic_lpi;
-
-	gic_lpi.start = gic_lpi_base;
-	gic_lpi.end = gic_lpi_base + GIC_LPI_SIZE - 1;
-	err = fdtdec_add_reserved_memory(blob, "gic-lpi", &gic_lpi, &phandle);
-	if (err < 0)
-		debug("failed to add reserved memory: %d\n", err);
-}
-#endif
-
 #ifdef CONFIG_OF_BOARD_SETUP
-int ft_board_setup(void *blob, bd_t *bd)
+int ft_board_setup(void *blob, struct bd_info *bd)
 {
 	int i;
 	u16 mc_memory_bank = 0;
@@ -670,7 +691,6 @@ int ft_board_setup(void *blob, bd_t *bd)
 	u64 mc_memory_base = 0;
 	u64 mc_memory_size = 0;
 	u16 total_memory_banks;
-	u64 gic_lpi_base;
 
 	ft_cpu_setup(blob, bd);
 
@@ -689,12 +709,6 @@ int ft_board_setup(void *blob, bd_t *bd)
 		base[i] = gd->bd->bi_dram[i].start;
 		size[i] = gd->bd->bi_dram[i].size;
 	}
-
-#ifdef CONFIG_GIC_V3_ITS
-	gic_lpi_base = gd->arch.resv_ram - GIC_LPI_SIZE;
-	gic_lpi_tables_init(gic_lpi_base, cpu_numcores());
-	fdt_fixup_gic_lpi_memory(blob, gic_lpi_base);
-#endif
 
 #ifdef CONFIG_RESV_RAM
 	/* reduce size if reserved memory is within this bank */

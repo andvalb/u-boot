@@ -20,6 +20,11 @@
 /* return CPU_STMP32MP...Xxx constants */
 u32 get_cpu_type(void);
 
+#define CPU_DEV_STM32MP15	0x500
+
+/* return CPU_DEV constants */
+u32 get_cpu_dev(void);
+
 #define CPU_REVA	0x1000
 #define CPU_REVB	0x2000
 #define CPU_REVZ	0x2001
@@ -43,3 +48,6 @@ void get_soc_name(char name[SOC_NAME_SIZE]);
 u32 get_bootmode(void);
 
 int setup_mac_address(void);
+
+/* board power management : configure vddcore according OPP */
+void board_vddcore_init(u32 voltage_mv);

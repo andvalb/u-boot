@@ -26,6 +26,17 @@ trying to get it to work optimally on a given system.
 
    build/index
 
+Developer-oriented documentation
+--------------------------------
+
+The following manuals are written for *developers* of the U-Boot - those who
+want to contribute to U-Boot.
+
+.. toctree::
+   :maxdepth: 2
+
+   develop/index
+
 Unified Extensible Firmware (UEFI)
 ----------------------------------
 
@@ -97,6 +108,13 @@ Android-specific features available in U-Boot.
    :maxdepth: 2
 
    android/index
+
+Command line
+------------
+.. toctree::
+   :maxdepth: 2
+
+   pstore.rst
 
 Indices and tables
 ==================

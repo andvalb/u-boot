@@ -9,6 +9,8 @@
 #define __CONFIG_H
 
 #include <linux/kconfig.h>
+#include <linux/stringify.h>
+
 /* SPL */
 /* #if defined(CONFIG_SPL_BUILD) */
 /* common IMX6 SPL configuration */
@@ -71,8 +73,6 @@
 #define TQMA6_UBOOT_OFFSET		SZ_1K
 #define TQMA6_UBOOT_SECTOR_START	0x2
 #define TQMA6_UBOOT_SECTOR_COUNT	0x7fe
-
-#define CONFIG_SYS_MMC_ENV_DEV		0
 
 #define TQMA6_FDT_OFFSET		(2 * SZ_1M)
 #define TQMA6_FDT_SECTOR_START		0x1000

@@ -9,8 +9,8 @@ import shutil
 import sys
 import threading
 
-import command
-import gitutil
+from patman import command
+from patman import gitutil
 
 RETURN_CODE_RETRY = -1
 
@@ -90,12 +90,12 @@ class BuilderThread(threading.Thread):
         thread_num: Our thread number (0-n-1), used to decide on a
                 temporary directory
     """
-    def __init__(self, builder, thread_num, incremental, per_board_out_dir):
+    def __init__(self, builder, thread_num, mrproper, per_board_out_dir):
         """Set up a new builder thread"""
         threading.Thread.__init__(self)
         self.builder = builder
         self.thread_num = thread_num
-        self.incremental = incremental
+        self.mrproper = mrproper
         self.per_board_out_dir = per_board_out_dir
 
     def Make(self, commit, brd, stage, cwd, *args, **kwargs):
@@ -243,7 +243,7 @@ class BuilderThread(threading.Thread):
                 # If we need to reconfigure, do that now
                 if do_config:
                     config_out = ''
-                    if not self.incremental:
+                    if self.mrproper:
                         result = self.Make(commit, brd, 'mrproper', cwd,
                                 'mrproper', *args, env=env)
                         config_out += result.combined
@@ -280,8 +280,6 @@ class BuilderThread(threading.Thread):
             work_in_output: Use the output directory as the work directory and
                 don't write to a separate output directory.
         """
-        if work_in_output:
-            return
         # Fatal error
         if result.return_code < 0:
             return
@@ -333,7 +331,7 @@ class BuilderThread(threading.Thread):
 
             # Write out the image and function size information and an objdump
             env = result.toolchain.MakeEnvironment(self.builder.full_path)
-            with open(os.path.join(build_dir, 'env'), 'w') as fd:
+            with open(os.path.join(build_dir, 'out-env'), 'w') as fd:
                 for var in sorted(env.keys()):
                     print('%s="%s"' % (var, env[var]), file=fd)
             lines = []
@@ -379,7 +377,8 @@ class BuilderThread(threading.Thread):
                             capture_stderr=True, cwd=result.out_dir,
                             raise_on_error=False, env=env)
             ubootenv = os.path.join(result.out_dir, 'uboot.env')
-            self.CopyFiles(result.out_dir, build_dir, '', ['uboot.env'])
+            if not work_in_output:
+                self.CopyFiles(result.out_dir, build_dir, '', ['uboot.env'])
 
             # Write out the image sizes file. This is similar to the output
             # of binutil's 'size' utility, but it omits the header line and
@@ -391,17 +390,21 @@ class BuilderThread(threading.Thread):
                 with open(sizes, 'w') as fd:
                     print('\n'.join(lines), file=fd)
 
-        # Write out the configuration files, with a special case for SPL
-        for dirname in ['', 'spl', 'tpl']:
-            self.CopyFiles(result.out_dir, build_dir, dirname, ['u-boot.cfg',
-                'spl/u-boot-spl.cfg', 'tpl/u-boot-tpl.cfg', '.config',
-                'include/autoconf.mk', 'include/generated/autoconf.h'])
+        if not work_in_output:
+            # Write out the configuration files, with a special case for SPL
+            for dirname in ['', 'spl', 'tpl']:
+                self.CopyFiles(
+                    result.out_dir, build_dir, dirname,
+                    ['u-boot.cfg', 'spl/u-boot-spl.cfg', 'tpl/u-boot-tpl.cfg',
+                     '.config', 'include/autoconf.mk',
+                     'include/generated/autoconf.h'])
 
-        # Now write the actual build output
-        if keep_outputs:
-            self.CopyFiles(result.out_dir, build_dir, '', ['u-boot*', '*.bin',
-                '*.map', '*.img', 'MLO', 'SPL', 'include/autoconf.mk',
-                'spl/u-boot-spl*'])
+            # Now write the actual build output
+            if keep_outputs:
+                self.CopyFiles(
+                    result.out_dir, build_dir, '',
+                    ['u-boot*', '*.bin', '*.map', '*.img', 'MLO', 'SPL',
+                     'include/autoconf.mk', 'spl/u-boot-spl*'])
 
     def CopyFiles(self, out_dir, build_dir, dirname, patterns):
         """Copy files from the build directory to the output.

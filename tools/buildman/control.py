@@ -5,18 +5,18 @@
 import multiprocessing
 import os
 import shutil
+import subprocess
 import sys
 
-import board
-import bsettings
-from builder import Builder
-import gitutil
-import patchstream
-import terminal
-from terminal import Print
-import toolchain
-import command
-import subprocess
+from buildman import board
+from buildman import bsettings
+from buildman import toolchain
+from buildman.builder import Builder
+from patman import command
+from patman import gitutil
+from patman import patchstream
+from patman import terminal
+from patman.terminal import Print
 
 def GetPlural(count):
     """Returns a plural 's' if count is not 1"""
@@ -172,15 +172,29 @@ def DoBuildman(options, args, toolchains=None, make_func=None, boards=None,
         print()
         return 0
 
+    if options.incremental:
+        print(col.Color(col.RED,
+                        'Warning: -I has been removed. See documentation'))
+    if not options.output_dir:
+        if options.work_in_output:
+            sys.exit(col.Color(col.RED, '-w requires that you specify -o'))
+        options.output_dir = '..'
+
     # Work out what subset of the boards we are building
     if not boards:
         if not os.path.exists(options.output_dir):
             os.makedirs(options.output_dir)
         board_file = os.path.join(options.output_dir, 'boards.cfg')
-        genboardscfg = os.path.join(options.git, 'tools/genboardscfg.py')
+        our_path = os.path.dirname(os.path.realpath(__file__))
+        genboardscfg = os.path.join(our_path, '../genboardscfg.py')
+        if not os.path.exists(genboardscfg):
+            genboardscfg = os.path.join(options.git, 'tools/genboardscfg.py')
         status = subprocess.call([genboardscfg, '-q', '-o', board_file])
         if status != 0:
-            sys.exit("Failed to generate boards.cfg")
+            # Older versions don't support -q
+            status = subprocess.call([genboardscfg, '-o', board_file])
+            if status != 0:
+                sys.exit("Failed to generate boards.cfg")
 
         boards = board.Boards()
         boards.ReadBoards(board_file)
@@ -203,7 +217,7 @@ def DoBuildman(options, args, toolchains=None, make_func=None, boards=None,
         sys.exit(col.Color(col.RED, 'No matching boards found'))
 
     if options.print_prefix:
-        err = ShowToolchainInfo(boards, toolchains)
+        err = ShowToolchainPrefix(boards, toolchains)
         if err:
             sys.exit(col.Color(col.RED, err))
         return 0
@@ -309,7 +323,7 @@ def DoBuildman(options, args, toolchains=None, make_func=None, boards=None,
             show_unknown=options.show_unknown, step=options.step,
             no_subdirs=options.no_subdirs, full_path=options.full_path,
             verbose_build=options.verbose_build,
-            incremental=options.incremental,
+            mrproper=options.mrproper,
             per_board_out_dir=options.per_board_out_dir,
             config_only=options.config_only,
             squash_config_y=not options.preserve_config_y,
@@ -341,23 +355,23 @@ def DoBuildman(options, args, toolchains=None, make_func=None, boards=None,
             commits = None
 
         Print(GetActionSummary(options.summary, commits, board_selected,
-                                options))
+                               options))
 
         # We can't show function sizes without board details at present
         if options.show_bloat:
             options.show_detail = True
-        builder.SetDisplayOptions(options.show_errors, options.show_sizes,
-                                  options.show_detail, options.show_bloat,
-                                  options.list_error_boards,
-                                  options.show_config,
-                                  options.show_environment)
+        builder.SetDisplayOptions(
+            options.show_errors, options.show_sizes, options.show_detail,
+            options.show_bloat, options.list_error_boards, options.show_config,
+            options.show_environment, options.filter_dtb_warnings,
+            options.filter_migration_warnings)
         if options.summary:
             builder.ShowSummary(commits, board_selected)
         else:
             fail, warned = builder.BuildBoards(commits, board_selected,
                                 options.keep_outputs, options.verbose)
             if fail:
-                return 128
+                return 100
             elif warned and not options.ignore_warnings:
-                return 129
+                return 101
     return 0

@@ -22,22 +22,9 @@ static const char *_parse_integer_fixup_radix(const char *s, unsigned int *base)
 				*base = 16;
 			else
 				*base = 8;
-		} else {
-			int i = 0;
-			char var;
-
+		} else
 			*base = 10;
-
-			do {
-				var = tolower(s[i++]);
-				if (var >= 'a' && var <= 'f') {
-					*base = 16;
-					break;
-				}
-			} while (var);
-		}
 	}
-
 	if (*base == 16 && s[0] == '0' && tolower(s[1]) == 'x')
 		s += 2;
 	return s;
@@ -175,4 +162,12 @@ long trailing_strtoln(const char *str, const char *end)
 long trailing_strtol(const char *str)
 {
 	return trailing_strtoln(str, NULL);
+}
+
+void str_to_upper(const char *in, char *out, size_t len)
+{
+	for (; len > 0 && *in; len--)
+		*out++ = toupper(*in++);
+	if (len)
+		*out = '\0';
 }

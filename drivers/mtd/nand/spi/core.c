@@ -26,6 +26,8 @@
 #include <spi-mem.h>
 #include <dm/device_compat.h>
 #include <dm/devres.h>
+#include <linux/bitops.h>
+#include <linux/bug.h>
 #include <linux/mtd/spinand.h>
 #endif
 
@@ -835,6 +837,7 @@ static const struct spinand_manufacturer *spinand_manufacturers[] = {
 	&gigadevice_spinand_manufacturer,
 	&macronix_spinand_manufacturer,
 	&micron_spinand_manufacturer,
+	&toshiba_spinand_manufacturer,
 	&winbond_spinand_manufacturer,
 };
 
@@ -981,13 +984,13 @@ static int spinand_detect(struct spinand_device *spinand)
 
 	ret = spinand_manufacturer_detect(spinand);
 	if (ret) {
-		dev_err(dev, "unknown raw ID %*phN\n", SPINAND_MAX_ID_LEN,
-			spinand->id.data);
+		dev_err(spinand->slave->dev, "unknown raw ID %*phN\n",
+			SPINAND_MAX_ID_LEN, spinand->id.data);
 		return ret;
 	}
 
 	if (nand->memorg.ntargets > 1 && !spinand->select_target) {
-		dev_err(dev,
+		dev_err(spinand->slave->dev,
 			"SPI NANDs with more than one die must implement ->select_target()\n");
 		return -EINVAL;
 	}
@@ -1073,7 +1076,7 @@ static int spinand_init(struct spinand_device *spinand)
 
 	ret = spinand_manufacturer_init(spinand);
 	if (ret) {
-		dev_err(dev,
+		dev_err(spinand->slave->dev,
 			"Failed to initialize the SPI NAND chip (err = %d)\n",
 			ret);
 		goto err_free_bufs;

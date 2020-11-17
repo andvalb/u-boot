@@ -6,6 +6,8 @@
 #ifndef _CONFIG_CLEARFOG_H
 #define _CONFIG_CLEARFOG_H
 
+#include <linux/stringify.h>
+
 /*
  * High Level Configuration Options (easy to change)
  */
@@ -18,10 +20,6 @@
 #define CONFIG_SYS_TCLK		250000000	/* 250MHz */
 
 /*
- * Commands configuration
- */
-
-/*
  * SDIO/MMC Card Configuration
  */
 #define CONFIG_SYS_MMC_BASE		MVEBU_SDIO_BASE
@@ -32,7 +30,6 @@
 #define CONFIG_ENV_MIN_ENTRIES		128
 
 /* Environment in MMC */
-#define CONFIG_SYS_MMC_ENV_DEV		0
 /*
  * For SD - reserve 1 LBA for MBR + 1M for u-boot image. The MMC/eMMC
  * boot image starts @ LBA-0.
@@ -104,12 +101,6 @@
 #define BOOT_TARGET_DEVICES_MMC(func)
 #endif
 
-#ifdef CONFIG_SCSI
-#define BOOT_TARGET_DEVICES_SCSI(func) func(SCSI, scsi, 0)
-#else
-#define BOOT_TARGET_DEVICES_SCSI(func)
-#endif
-
 #ifdef CONFIG_USB_STORAGE
 #define BOOT_TARGET_DEVICES_USB(func) func(USB, usb, 0)
 #else
@@ -152,7 +143,6 @@
  */
 #define BOOT_TARGET_DEVICES(func) \
 	BOOT_TARGET_DEVICES_MMC(func) \
-	BOOT_TARGET_DEVICES_SCSI(func) \
 	BOOT_TARGET_DEVICES_USB(func) \
 	BOOT_TARGET_DEVICES_SCSI_BUS0(func) \
 	BOOT_TARGET_DEVICES_SCSI_BUS1(func) \

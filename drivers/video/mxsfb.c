@@ -8,7 +8,10 @@
 #include <clk.h>
 #include <dm.h>
 #include <env.h>
+#include <log.h>
+#include <asm/cache.h>
 #include <dm/device_compat.h>
+#include <linux/delay.h>
 #include <linux/errno.h>
 #include <malloc.h>
 #include <video.h>
@@ -75,6 +78,12 @@ static void mxs_lcd_init(struct udevice *dev, u32 fb_addr,
 	ret = clk_set_rate(&per_clk, timings->pixelclock.typ);
 	if (ret < 0) {
 		dev_err(dev, "Failed to set mxs clk: %d\n", ret);
+		return;
+	}
+
+	ret = clk_enable(&per_clk);
+	if (ret < 0) {
+		dev_err(dev, "Failed to enable mxs clk: %d\n", ret);
 		return;
 	}
 #else

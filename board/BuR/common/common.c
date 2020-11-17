@@ -8,12 +8,14 @@
  * Bernecker & Rainer Industrieelektronik GmbH - http://www.br-automation.com
  *
  */
+#include <log.h>
 #include <version.h>
 #include <common.h>
 #include <env.h>
 #include <fdtdec.h>
 #include <i2c.h>
 #include <lcd.h>
+#include <linux/delay.h>
 #include "bur_common.h"
 
 DECLARE_GLOBAL_DATA_PTR;
@@ -244,7 +246,7 @@ void lcd_enable(void)
 }
 #endif /* CONFIG_LCD */
 
-int ft_board_setup(void *blob, bd_t *bd)
+int ft_board_setup(void *blob, struct bd_info *bd)
 {
 	int nodeoffset;
 

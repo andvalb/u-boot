@@ -33,8 +33,6 @@
 #define CONFIG_SYS_BAUDRATE_TABLE  \
 	{300, 600, 1200, 2400, 4800, 9600, 19200, 38400, 57600, 115200, 230400}
 
-#define CONFIG_ARM_DCC
-
 /* Ethernet driver */
 #if defined(CONFIG_ZYNQ_GEM)
 # define CONFIG_SYS_FAULT_ECHO_LINK_DOWN
@@ -95,9 +93,6 @@
 # define DFU_ALT_INFO
 #endif
 
-/* Allow to overwrite serial and ethaddr */
-#define CONFIG_ENV_OVERWRITE
-
 /* enable preboot to be loaded before CONFIG_BOOTDELAY */
 
 /* Boot configuration */
@@ -152,7 +147,8 @@
 #define BOOTENV_DEV_QSPI(devtypeu, devtypel, instance) \
 	"bootcmd_qspi=sf probe 0 0 0 && " \
 		      "sf read ${scriptaddr} ${script_offset_f} ${script_size_f} && " \
-		      "source ${scriptaddr}; echo SCRIPT FAILED: continuing...;\0"
+		      "echo QSPI: Trying to boot script at ${scriptaddr} && " \
+		      "source ${scriptaddr}; echo QSPI: SCRIPT FAILED: continuing...;\0"
 
 #define BOOTENV_DEV_NAME_QSPI(devtypeu, devtypel, instance) \
 	"qspi "
@@ -160,7 +156,8 @@
 #define BOOTENV_DEV_NAND(devtypeu, devtypel, instance) \
 	"bootcmd_nand=nand info && " \
 		      "nand read ${scriptaddr} ${script_offset_f} ${script_size_f} && " \
-		      "source ${scriptaddr}; echo SCRIPT FAILED: continuing...;\0"
+		      "echo NAND: Trying to boot script at ${scriptaddr} && " \
+		      "source ${scriptaddr}; echo NAND: SCRIPT FAILED: continuing...;\0"
 
 #define BOOTENV_DEV_NAME_NAND(devtypeu, devtypel, instance) \
 	"nand "
@@ -168,7 +165,8 @@
 #define BOOTENV_DEV_NOR(devtypeu, devtypel, instance) \
 	"script_offset_nor=0xE2FC0000\0"        \
 	"bootcmd_nor=cp.b ${script_offset_nor} ${scriptaddr} ${script_size_f} && " \
-		     "source ${scriptaddr}; echo SCRIPT FAILED: continuing...;\0"
+		     "echo NOR: Trying to boot script at ${scriptaddr} && " \
+		     "source ${scriptaddr}; echo NOR: SCRIPT FAILED: continuing...;\0"
 
 #define BOOTENV_DEV_NAME_NOR(devtypeu, devtypel, instance) \
 	"nor "
@@ -176,7 +174,8 @@
 #define BOOT_TARGET_DEVICES_JTAG(func)  func(JTAG, jtag, na)
 
 #define BOOTENV_DEV_JTAG(devtypeu, devtypel, instance) \
-	"bootcmd_jtag=source $scriptaddr; echo SCRIPT FAILED: continuing...;\0"
+	"bootcmd_jtag=echo JTAG: Trying to boot script at ${scriptaddr} && " \
+		"source ${scriptaddr}; echo JTAG: SCRIPT FAILED: continuing...;\0"
 
 #define BOOTENV_DEV_NAME_JTAG(devtypeu, devtypel, instance) \
 	"jtag "
@@ -197,8 +196,6 @@
 /* Default environment */
 #ifndef CONFIG_EXTRA_ENV_SETTINGS
 #define CONFIG_EXTRA_ENV_SETTINGS	\
-	"fdt_high=0x20000000\0"		\
-	"initrd_high=0x20000000\0"	\
 	"scriptaddr=0x20000\0"	\
 	"script_size_f=0x40000\0"	\
 	"fdt_addr_r=0x1f00000\0"        \
@@ -216,9 +213,6 @@
 #define CONFIG_SYS_MAXARGS		32 /* max number of command args */
 #define CONFIG_SYS_CBSIZE		2048 /* Console I/O Buffer Size */
 
-#define CONFIG_SYS_MEMTEST_START	0
-#define CONFIG_SYS_MEMTEST_END		0x1000
-
 #define CONFIG_SYS_INIT_RAM_ADDR	0xFFFF0000
 #define CONFIG_SYS_INIT_RAM_SIZE	0x2000
 #define CONFIG_SYS_INIT_SP_ADDR		(CONFIG_SYS_INIT_RAM_ADDR + \
@@ -234,7 +228,6 @@
 
 /* MMC support */
 #ifdef CONFIG_MMC_SDHCI_ZYNQ
-#define CONFIG_SYS_MMCSD_FS_BOOT_PARTITION     1
 #define CONFIG_SPL_FS_LOAD_PAYLOAD_NAME     "u-boot.img"
 #endif
 
@@ -276,7 +269,5 @@
 /* BSS setup */
 #define CONFIG_SPL_BSS_START_ADDR	0x100000
 #define CONFIG_SPL_BSS_MAX_SIZE		0x100000
-
-#define CONFIG_SPL_LOAD_FIT_ADDRESS 0x10000000
 
 #endif /* __CONFIG_ZYNQ_COMMON_H */

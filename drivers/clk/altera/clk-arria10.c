@@ -12,6 +12,7 @@
 #include <dm/devres.h>
 #include <dm/lists.h>
 #include <dm/util.h>
+#include <linux/bitops.h>
 
 #include <asm/arch/clock_manager.h>
 
@@ -284,7 +285,7 @@ static int socfpga_a10_clk_probe(struct udevice *dev)
 	socfpga_a10_handoff_workaround(dev);
 
 	if (!fdt_node_check_compatible(fdt, offset, "altr,clk-mgr")) {
-		plat->regs = devfdt_get_addr(dev);
+		plat->regs = dev_read_addr(dev);
 	} else {
 		pdev = dev_get_parent(dev);
 		if (!pdev)

@@ -4,9 +4,11 @@
  */
 
 #include <common.h>
+#include <log.h>
 #include <serial.h>
 #include <dm.h>
 #include <dm/test.h>
+#include <test/test.h>
 #include <test/ut.h>
 
 static int dm_test_serial(struct unit_test_state *uts)
@@ -67,4 +69,4 @@ static int dm_test_serial(struct unit_test_state *uts)
 	return 0;
 }
 
-DM_TEST(dm_test_serial, DM_TESTF_SCAN_FDT);
+DM_TEST(dm_test_serial, UT_TESTF_SCAN_FDT);

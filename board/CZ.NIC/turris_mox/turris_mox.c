@@ -6,6 +6,7 @@
 #include <common.h>
 #include <asm/arch/cpu.h>
 #include <asm/arch/soc.h>
+#include <net.h>
 #include <asm/io.h>
 #include <asm/gpio.h>
 #include <clk.h>
@@ -13,6 +14,7 @@
 #include <env.h>
 #include <fdt_support.h>
 #include <init.h>
+#include <linux/delay.h>
 #include <linux/libfdt.h>
 #include <linux/string.h>
 #include <miiphy.h>
@@ -698,7 +700,7 @@ static int remove_disabled_nodes(void *blob)
 	return 0;
 }
 
-int ft_board_setup(void *blob, bd_t *bd)
+int ft_board_setup(void *blob, struct bd_info *bd)
 {
 	int node, phandle, res;
 

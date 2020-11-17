@@ -11,12 +11,14 @@
 #ifdef USE_HOSTCC
 #include "mkimage.h"
 #include <time.h>
+#include <linux/libfdt.h>
 #include <u-boot/crc.h>
 #else
 #include <linux/compiler.h>
 #include <linux/kconfig.h>
 #include <common.h>
 #include <errno.h>
+#include <log.h>
 #include <mapmem.h>
 #include <asm/io.h>
 #include <malloc.h>
@@ -30,6 +32,7 @@ DECLARE_GLOBAL_DATA_PTR;
 #include <u-boot/md5.h>
 #include <u-boot/sha1.h>
 #include <u-boot/sha256.h>
+#include <u-boot/sha512.h>
 
 /*****************************************************************************/
 /* New uImage format routines */
@@ -1204,6 +1207,14 @@ int calculate_hash(const void *data, int data_len, const char *algo,
 		sha256_csum_wd((unsigned char *)data, data_len,
 			       (unsigned char *)value, CHUNKSZ_SHA256);
 		*value_len = SHA256_SUM_LEN;
+	} else if (IMAGE_ENABLE_SHA384 && strcmp(algo, "sha384") == 0) {
+		sha384_csum_wd((unsigned char *)data, data_len,
+			       (unsigned char *)value, CHUNKSZ_SHA384);
+		*value_len = SHA384_SUM_LEN;
+	} else if (IMAGE_ENABLE_SHA512 && strcmp(algo, "sha512") == 0) {
+		sha512_csum_wd((unsigned char *)data, data_len,
+			       (unsigned char *)value, CHUNKSZ_SHA512);
+		*value_len = SHA512_SUM_LEN;
 	} else if (IMAGE_ENABLE_MD5 && strcmp(algo, "md5") == 0) {
 		md5_wd((unsigned char *)data, data_len, value, CHUNKSZ_MD5);
 		*value_len = 16;
