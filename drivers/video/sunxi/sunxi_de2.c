@@ -102,6 +102,7 @@ static void sunxi_de2_mode_set(int mux, const struct display_timing *mode,
 	u32 size = SUNXI_DE2_WH(mode->hactive.typ, mode->vactive.typ);
 	int channel;
 	u32 format;
+
 	/* enable clock */
 #ifdef CONFIG_MACH_SUN8I_H3
 	setbits_le32(&de_clk_regs->rst_cfg, (mux == 0) ? 1 : 4);

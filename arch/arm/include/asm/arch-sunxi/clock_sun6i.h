@@ -329,17 +329,12 @@ struct sunxi_ccm_reg {
 #define AHB_GATE_OFFSET_DE		12
 #define AHB_GATE_OFFSET_HDMI		11
 #define AHB_GATE_OFFSET_TVE		9
-#if !defined(CONFIG_SUNXI_DE2) || defined(CONFIG_MACH_SUN8I_V3S)
-#define AHB_GATE_OFFSET_LCD1		5
-#define AHB_GATE_OFFSET_LCD0		4
-#else
-#if defined(CONFIG_MACH_SUN8I_V3S) || defined(CONFIG_MACH_SUN8I_S3)
+#if !defined(CONFIG_SUNXI_DE2) || defined(CONFIG_MACH_SUN8I_V3S) || defined(CONFIG_MACH_SUN8I_S3)
 #define AHB_GATE_OFFSET_LCD1		5
 #define AHB_GATE_OFFSET_LCD0		4
 #else
 #define AHB_GATE_OFFSET_LCD1		4
 #define AHB_GATE_OFFSET_LCD0		3
-#endif
 #endif
 
 #define CCM_NAND_CTRL_M(x)		((x) - 1)
@@ -481,17 +476,12 @@ struct sunxi_ccm_reg {
 #define AHB_RESET_OFFSET_HDMI		11
 #define AHB_RESET_OFFSET_HDMI2		10
 #define AHB_RESET_OFFSET_TVE		9
-#if !defined(CONFIG_SUNXI_DE2) || defined(CONFIG_MACH_SUN8I_V3S)
-#define AHB_RESET_OFFSET_LCD1		5
-#define AHB_RESET_OFFSET_LCD0		4
-#else
-#if defined(CONFIG_MACH_SUN8I_V3S) || defined(CONFIG_MACH_SUN8I_S3)
+#if !defined(CONFIG_SUNXI_DE2) || defined(CONFIG_MACH_SUN8I_V3S) || defined(CONFIG_MACH_SUN8I_S3)
 #define AHB_RESET_OFFSET_LCD1		5
 #define AHB_RESET_OFFSET_LCD0		4
 #else
 #define AHB_RESET_OFFSET_LCD1		4
 #define AHB_RESET_OFFSET_LCD0		3
-#endif
 #endif
 
 /* ahb_reset2 offsets */

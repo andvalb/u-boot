@@ -25,14 +25,14 @@ struct sunxi_lcd_priv {
 
 static void sunxi_lcdc_config_pinmux(void)
 {
-#if defined(CONFIG_MACH_SUN50I) || defined(CONFIG_MACH_SUN8I_V3S) || defined(CONFIG_MACH_SUN8I_S3)
+#ifdef CONFIG_MACH_SUN50I
 	int pin;
 
 	for (pin = SUNXI_GPD(0); pin <= SUNXI_GPD(21); pin++) {
 		sunxi_gpio_set_cfgpin(pin, SUNXI_GPD_LCD0);
 		sunxi_gpio_set_drv(pin, 3);
 	}
-#elif defined(CONFIG_MACH_SUN8I_V3S)
+#elif defined(CONFIG_MACH_SUN8I_V3S) || defined(CONFIG_MACH_SUN8I_S3)
 	int pin;
 
 	for (pin = SUNXI_GPE(0); pin <= SUNXI_GPE(19); pin++)

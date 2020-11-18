@@ -430,8 +430,6 @@ config EXAMPLES
 	  U-Boot provides an API for standalone applications. Examples are
 	  provided in directory examples/.
 
-	default 0x4a000000 if ARCH_SUNXI && !MACH_SUN9I && !MACH_SUN8I_V3S
-	default 0x42e00000 if ARCH_SUNXI && MACH_SUN8I_V3S
 endmenu		# General setup
 
 source "api/Kconfig"
